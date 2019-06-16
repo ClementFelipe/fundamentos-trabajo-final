@@ -1,0 +1,126 @@
+---
+title: Telco churn
+author: Lina Marcela Quintero - Felipe Clement Santacruz
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+---
+
+```{r libraries, include=FALSE}
+library(tidyverse)
+```
+
+# Carga de datos
+
+```{r load}
+data_raw <- read.csv("data.csv")
+
+colnames(data_raw) <- tolower(colnames(data_raw))
+
+str(data_raw)
+```
+
+# Pregunta 1.1 - Exploracion de datos {.tabset}
+
+Se revisa cada columna con el proposito de encontrar anomalias. Un resumen inicial es:
+
+```{r summary}
+summary(data_raw)
+```
+
+No se encuentran `NA` o valores fuera de rango (negativos, ilogicos). Se procede a explorar la distribucion de todas las columnas y se encuentra que las variables con mayor poder predictivo son `SOBRECARGO` y `SATISFACCION`; no existen anomalias en los datos.
+
+## Estado
+
+```{r estado}
+data.frame(
+  retirados = nrow(data_raw[(data_raw$estado == "RETIRADO"),]) / nrow(data_raw),
+  vinculados = nrow(data_raw[(data_raw$estado == "VINCULADO"),]) / nrow(data_raw)
+)
+```
+
+La distribucion de personas retiradas y vinculadas es casi igual, con el 50.36% de clientes retirados y el 49.63% vinculados.
+
+## Ingresos
+
+```{r ingresos}
+ggplot(data_raw) + geom_density(aes(ingresos, group = estado, fill = estado, alpha = I(0.5)))
+```
+
+Esta variable parece segregar los clientes en 3 grupos diferentes.
+
+## Casa
+
+```{r casa}
+ggplot(data_raw) + geom_density(aes(casa, group = estado, fill = estado, alpha = I(0.5)))
+```
+
+## Precio dispositivo
+
+```{r precio_dispositivo}
+ggplot(data_raw) + geom_density(aes(precio_dispositivo, group = estado, fill = estado, alpha = I(0.5)))
+```
+
+Parece que los datos tambien presentan 2 subconjuntos de clientes.
+
+## Meses
+
+```{r meses}
+ggplot(data_raw) + geom_density(aes(meses, group = estado, fill = estado, alpha = I(0.5)))
+```
+
+La mayoria de los clientes tienen una duracion mayor a 4 meses. No parece que hay correlacion entre el estado y los meses, es decir, los clientes que se van se quedan el mismo tiempo que los que se van.
+
+## Duracion
+
+```{r duracion}
+ggplot(data_raw) + geom_density(aes(duracion, group = estado, fill = estado, alpha = I(0.5)))
+```
+
+Esta variable logra dividir los clientes en dos grupos casi perfectamente.
+
+## Sobrecargo
+
+```{r sobrecargo}
+ggplot(data_raw) + geom_density(aes(sobrecargo, group = estado, fill = estado, alpha = I(0.5)))
+```
+
+Esta variable logra dividir los clientes en dos grupos casi perfectamente. Presenta bastante poder predictivo, pues segrega bien entre estados.
+
+## Saldo restante
+
+```{r saldo_restante}
+ggplot(data_raw) + geom_density(aes(saldo_restante, group = estado, fill = estado, alpha = I(0.5)))
+```
+
+Esta variable logra dividir los clientes en dos grupos.
+
+## Satisfaccion
+
+```{r satisfaccion}
+ggplot(data_raw) + geom_density(aes(satisfaccion, group = estado, fill = estado, alpha = I(0.5)))
+```
+
+Esta variable logra dividir los clientes en dos grupos casi perfectamente. Presenta bastante poder predictivo, pues segrega bien entre estados.
+
+# Pregunta 1.2 - Eliminacion de outliers
+
+Se procede a eliminar observaciones con cualquiera de sus predictores por fuera de 4 desviaciones estabdar.
+
+```{r outliers}
+are_outliers <- function(dt) {
+  mean_data <- mean(dt)
+  sd_data <- sd(dt)
+  
+  are_outliers <- abs((dt - mean_data) / sd_data) >= 4
+
+  return(are_outliers)
+}
+
+data <- data_raw %>%
+  filter_at(vars(-matches("estado")), all_vars(!are_outliers(.)))
+
+nrow(data_raw) - nrow(data)
+```
