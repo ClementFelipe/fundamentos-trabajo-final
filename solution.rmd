@@ -49,6 +49,8 @@ La distribucion de personas retiradas y vinculadas es casi igual, con el 50.36% 
 
 ```{r ingresos}
 ggplot(data_raw) + geom_density(aes(ingresos, group = estado, fill = estado, alpha = I(0.5)))
+ggplot(data_raw) +
+  geom_point(aes(x = ingresos, y = casa, alpha = I(0.1)))
 ```
 
 Esta variable parece segregar los clientes en 3 grupos diferentes.
@@ -156,11 +158,11 @@ Debido a que la cantidad de datos no es mucha --solo son 8 predictores y 23158 o
 
 * Entrenar los modelos con **todos** los datos
 * Reducir la varianza de la estimacion del error de clasificacion de test, permitiendo escoger con mas certeza el modelo y parametros correctos
-* Permitir una computacion del error de test que se computacionalmente viable (en LOOCV se tendrian que entrenar mas de 23 mil modelos para cada parametro posible de todos los modelos)
+* Permitir una computacion del error de test que sea computacionalmente viable (en LOOCV se tendrian que entrenar mas de 23 mil modelos para cada parametro posible de todos los modelos)
 
 ## b - Metricas
 
-Debido a que predecir los clientes con mayor probabilidad de irse es lo mas importante para este problema, se usara el **accuracy** como metrica para escoger un modelo durante el training. Es posible utilizar el accuracy y no el Kappa, debido a que las clases objetivo estan balanceadas y el baseline es del 50.36%. Adicional a esto, con el test set se tendra en cuenta el **recall** para escoger el modelo final, esto es debido a que lo mas importante es maximizar el porcentaje de personas que en realidad se fueron y fueron predichas correctamente.
+Debido a que predecir los clientes con mayor probabilidad de irse es lo mas importante para este problema, se usara el **accuracy** como metrica para escoger un modelo durante el training. Es posible utilizar el accuracy y no el Kappa, debido a que las clases objetivo estan balanceadas y el baseline es del 50.36%. Adicional a esto, con el test set se tendra en cuenta el **recall** para escoger el modelo final, esto es debido a que lo mas importante es maximizar el porcentaje de personas que en realidad se retiraron y fueron predichas correctamente.
 
 ## c - Modelos
 
@@ -210,8 +212,11 @@ ggplot(model_knn$results) +
   geom_line(aes(x = k, y = Accuracy, color = "Accuracy")) +
   geom_line(aes(x = k, y = Kappa, color = "Kappa"))
 
-model_knn$results[which.max(model_knn$results$Accuracy), ]
-model_knn$results[which.max(model_knn$results$Kappa), ]
+knn_accuracy <- model_knn$results[which.max(model_knn$results$Accuracy), ]$Accuracy
+knn_kappa <- model_knn$results[which.max(model_knn$results$Kappa), ]$Kappa
+
+knn_accuracy
+knn_kappa
 ```
 
 Se puede observar que ambos errores decrecen rapidamente hasta k = 15, donde luego el error se estabiliza. Se selecciona un valor de K de 15, pues es el parametro que maximiza el Kappa y accuracy simultaneamente, teniendo menor probabilidad de overfitting que un K grande.
@@ -238,7 +243,11 @@ ggplot(model_tree$results) +
   geom_line(aes(x = -cp, y = Accuracy, color = "Accuracy")) +
   geom_line(aes(x = -cp, y = Kappa, color = "Kappa"))
 
-model_tree$bestTune$cp
+tree_accuracy <- model_tree$results[model_tree$results$cp == model_tree$bestTune$cp, ]$Accuracy
+tree_kappa <- model_tree$results[model_tree$results$cp == model_tree$bestTune$cp, ]$Kappa
+
+tree_accuracy
+tree_kappa
 ```
 
 Para este modelo, un cp de 0.807 se maximiza el accuracy y kappa, se elige finalmente un cp de 0.8, pues si bien existen parametros de complejidad mas bajos que logran el mismo accuracy y Kappa, este valor mas alto tendra menos probabilidad de overfitting.
@@ -268,6 +277,53 @@ Se grafica el resultado del accuracy y Kappa.
 
 ```{r reg_result}
 model_reg$results
+
+reg_accuracy <- model_reg$results$Accuracy
+reg_kappa <- model_reg$results$Kappa
+
+reg_accuracy
+reg_kappa
 ```
 
 El resultado de esta regresion resulta en un modelo con las variables `sobrecargo` y `satisfaccion`, que fueron las dos variables identificadas anteriormente como las de mayor poder predictivo.
+
+## d - Evaluacion
+
+Los tres modelos tienen los siguientes accuracy y Kappa:
+
+```{r eval1}
+data.frame(
+  Method = c("KNN", "Gini tree", "Logistic regression"),
+  Accuracy = c(knn_accuracy, tree_accuracy, reg_accuracy),
+  Kappa = c(knn_kappa, tree_kappa, reg_kappa)
+)
+```
+
+Como se puede observar, el mejor modelo es el arbol de decision Gini. Es marginalmente mejor que los otros dos modelos y se procede a evaluar el accuracy y recall de las predicciones de cada uno sobre el test set.
+
+### KNN
+
+```{r predict_knn}
+knn_predictions <- predict(object = model_knn, data_test)
+
+knn_results <- confusionMatrix(knn_predictions, data_test$estado)
+knn_results
+```
+
+### Arbol de decision
+
+```{r predict_tree}
+tree_predictions <- predict(object = model_tree, data_test)
+
+tree_results <- confusionMatrix(tree_predictions, data_test$estado)
+tree_results
+```
+
+### Regresion logistica
+
+```{r predict_reg}
+reg_predictions <- predict(object = model_reg, data_test)
+
+reg_results <- confusionMatrix(reg_predictions, data_test$estado)
+reg_results
+```
