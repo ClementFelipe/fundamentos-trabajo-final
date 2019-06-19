@@ -220,7 +220,7 @@ Se puede observar que ambos errores decrecen rapidamente hasta k = 15, donde lue
 
 Se procede a entrenar un modelo de arbol de decision con el parametro de complejidad tomando valores entre 0 y 1, con pasos de 0.001.
 
-```{r knn, cache = TRUE}
+```{r tree, cache = TRUE}
 seed <- c(1)
 tree_seeds <- list(seed, seed, seed, seed, seed, seed, seed, seed, seed, seed, 1)
 
@@ -233,13 +233,12 @@ model_tree <- train(estado ~ ., data_training,
 
 Se grafica el resultado del accuracy y Kappa.
 
-```{r knn_result}
+```{r tree_result}
 ggplot(model_tree$results) +
   geom_line(aes(x = -cp, y = Accuracy, color = "Accuracy")) +
   geom_line(aes(x = -cp, y = Kappa, color = "Kappa"))
 
 model_tree$bestTune$cp
-model_tree$results
 ```
 
 Para este modelo, un cp de 0.807 se maximiza el accuracy y kappa, se elige finalmente un cp de 0.8, pues si bien existen parametros de complejidad mas bajos que logran el mismo accuracy y Kappa, este valor mas alto tendra menos probabilidad de overfitting.
@@ -248,7 +247,7 @@ Para este modelo, un cp de 0.807 se maximiza el accuracy y kappa, se elige final
 
 Se procede a entrenar un modelo de regresion logistica stepwise con AIC.
 
-```{r REG}
+```{r reg, cache = TRUE}
 seed <- c(1)
 reg_seeds <- list(seed, seed, seed, seed, seed, seed, seed, seed, seed, seed, 1)
 
@@ -267,7 +266,7 @@ stopCluster(cl)
 
 Se grafica el resultado del accuracy y Kappa.
 
-```{r ada_result}
+```{r reg_result}
 model_reg$results
 ```
 
