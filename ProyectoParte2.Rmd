@@ -47,21 +47,500 @@ apply(clientesR, 2, var)
 Dado que las variables tienen promedios y varianzas diferentes, se pasa a estandarizar los datos para arreglar dichos problemas.
 
 ```{r eda3, echo=FALSE}
+
+#estandarización
 modelo_std<- preProcess(clientesR, method = c("center", "scale"))
 clientesR_std <- predict(modelo_std, clientesR)
 summary(clientesR_std)
+apply(clientesR, 2, sd)
 
+#correlaciones de las variables estandarizadas
 corMat <- cor(clientesR_std)
 corrplot(corMat, type="upper", order="hclust")
 
 ```
 
 El gráfico anterior nos permite observar que existen variables correlacionadas, lo que podría beneficiar la aplicación del algoritmo PCA.
+Hay X variables muy correlacionadas positivamente entre ellas: xxxxx,xxxx,xxxx.
 
 ### 1.3 No se que titulo poner aquí
+
+Boxplot de variables estandarizadas....
 
 ```{r eda4, echo=FALSE}
 ggplot(stack(clientesR_std), aes(x = ind, y = values)) +
   geom_boxplot(aes(fill=ind))
 
 ```
+
+ajdafdjfñadjlakdsf
+ladjñladjñakjdfslkdkdkd
+
+
+```{r eda5, echo=FALSE}
+# Aquí pondría 
+
+```
+
+### 2. Determinación del número de clusters
+Para determinar cual es el número de campañas a realizar (punto 1), vamos a evaluar cuál es el mejor número para K haciendo uso de las tecnicas: Método del codo, Método de Calinski-Harabasz, Método de la silueta y Clusterboot.
+
+#### Método del codo
+
+```{r codo, echo=FALSE}
+clientesR_std_detclust<-clientesR_std
+vars <- apply(clientesR_std_detclust,2,var)
+sumvars <- sum(vars)
+wss <- (nrow(clientesR_std_detclust) - 1)*sumvars
+
+
+set.seed(1234)
+maxK <- 10
+for (k in 2:maxK) { 
+  wssK <- 0 
+  kmClustering <- kmeans(clientesR_std_detclust, k, nstart=20, iter.max=150)
+  clientesR_std_detclust$clusters <- kmClustering$cluster
+  
+  for(i in 1:k) { 
+    clusterData <- subset(clientesR_std_detclust, clusters==i)
+    centroide <- apply(clusterData, 2, FUN=mean)
+    wssK <- wssK + sum(apply(clusterData, 1, FUN=function(fila) {sum((fila-centroide)^2)}))
+  }
+  
+  wss[k] <- wssK
+}
+wss
+plot(1:maxK, wss, type = "b", xlab = "Número de Clusters", ylab = "Within groups sum of squares")  
+
+```
+
+De la gráfica anterior se puede observar dos posibilidades de codo k=3, k=4 y k=5. La reducciòn del WSS más allá de 5 pareciera ser no tan significativa. Aún sin tener en cuenta la restricciones del negocio, el número de clusters que sugiere este método posiblemente es 4 o 5. 
+#### Método de Calinski-Harabasz
+
+```{r ch, echo=FALSE}
+
+colnames(clientesR_std_detclust)
+clientesR_std_detclust$clusters <- NULL #Borramos el clustering anterior 
+colnames(clientesR_std_detclust)
+
+set.seed(11111)
+kmClusteringRuns.ch <- kmeansruns(clientesR_std_detclust, krange=1:10, criterion="ch")
+#summary(kmClusteringRuns.ch)
+#kmClusteringRuns.ch$bestk
+#kmClusteringRuns.ch$crit
+#kmClusteringRuns.ch$cluster[1:10]
+val_ch <- kmClusteringRuns.ch$crit
+rm(kmClusteringRuns.ch)
+
+plot(val_ch) 
+
+```
+
+La figura anterior muestra que el mejor particionamiento es con k=3.
+
+#### Método de la silueta
+
+```{r silueta, echo=FALSE}
+
+colnames(clientesR_std_detclust)
+clientesR_std_detclust$clusters <- NULL #Borramos el clustering anterior 
+colnames(clientesR_std_detclust)
+
+distancias <- dist(clientesR_std_detclust)
+
+# Iteramos de K=2 a 8
+val_k <- 2:8
+val_sil<- 0
+for(k in val_k) {
+  resultadoKMeansK <- kmeans(clientesR_std_detclust, centers = k, nstart = 25, iter.max=20)
+  sil <- silhouette(resultadoKMeansK$cluster, dist(clientesR_std_detclust))
+  val_sil[k-1] <- mean(sil[, "sil_width"])
+}
+
+rm(distancias, resultadoKMeansK, sil)
+gc()
+
+val_sil
+
+plot(val_k, val_sil,
+       type = "b", pch = 19, frame = FALSE, 
+       xlab = "K",
+       ylab = "Silueta promedio")
+
+```
+
+Se puede observar que el clirterio de silueta promedio cuenta con un valor muy alto para 3. Si embargo vamos a analizar los perfiles de las siluetas para el clustering 3, 4 y 5
+
+```{r clusterboot, echo=FALSE}
+k <- 3
+set.seed(1234)
+kmClustering3 <- kmeans(clientesR_std_detclust, k, nstart=100, iter.max=150)
+silueta <- silhouette(kmClustering3$cluster, dist(clientesR_std_detclust))
+fviz_silhouette(silueta, label = FALSE, print.summary = TRUE, main="Silueta para K=3")
+
+k <- 4
+set.seed(1234)
+kmClustering4 <- kmeans(clientesR_std_detclust, k, nstart=100, iter.max=150)
+silueta <- silhouette(kmClustering4$cluster, dist(clientesR_std_detclust))
+fviz_silhouette(silueta, label = FALSE, print.summary = TRUE, main="Silueta para K=4")
+
+k <- 5
+set.seed(1234)
+kmClustering5 <- kmeans(clientesR_std_detclust, k, nstart=100, iter.max=150)
+silueta <- silhouette(kmClustering5$cluster, dist(clientesR_std_detclust))
+fviz_silhouette(silueta, label = FALSE, print.summary = TRUE, main="Silueta para K=5")
+
+sil_df = data.frame(silueta[,])
+dt <- data.table(sil_df)
+dt[, list(mean=mean(sil_width)), by=cluster]
+
+
+```
+
+k=3 clusters dos grandes y pequeño. un poco de valores negativos.
+k=4 cluster con valores positivos y negativos.
+k=5 dos clustesrs con valores negativos.
+
+Podemos ver que con K=4 las siluetas de cada cluster son peores que con K=3 o K=5. En estos dos útlimos clusterings, tenemos un gran cluster que posee valores de silueta positivos, y otros con unos cuantos clientes con valores negativos.
+
+#### Clusterboot
+
+
+```{r clusterboot, echo=FALSE}
+
+colnames(clientesR_std_detclust)
+set.seed(3333)
+modelo_bootstrap_km <- clusterboot(clientesR_std_detclust, clustermethod = kmeansCBI, krange=3, B=100, iter.max=150)
+modelo_bootstrap_km$result$partition[1:10] # los clusters de cada una de las primeras 10 instancias de datos
+modelo_bootstrap_km$bootmean #vector de las estabilidades de cada cluster (promedio de Jaccard)
+modelo_bootstrap_km$bootbrd # número de disoluciones de los clusters en los B runs ejecutados (Jaccard < 0.5)
+modelo_bootstrap_km$bootrecover # número de recuperaciones de los clusters en los B runs ejecutados (Jaccard > 0.75)
+
+set.seed(3333)
+modelo_bootstrap_km <- clusterboot(clientesR_std_detclust, clustermethod = kmeansCBI, krange=4, B=100, iter.max=150)
+modelo_bootstrap_km$bootmean #vector de las estabilidades de cada cluster (promedio de Jaccard)
+modelo_bootstrap_km$bootbrd # número de disoluciones de los clusters en los B runs ejecutados (Jaccard < 0.5)
+modelo_bootstrap_km$bootrecover # número de recuperaciones de los clusters en los B runs ejecutados (Jaccard > 0.75)
+
+set.seed(3333)
+modelo_bootstrap_km <- clusterboot(clientesR_std_detclust, clustermethod = kmeansCBI, krange=5, B=100, iter.max=150)
+modelo_bootstrap_km$bootmean #vector de las estabilidades de cada cluster (promedio de Jaccard)
+modelo_bootstrap_km$bootbrd # número de disoluciones de los clusters en los B runs ejecutados (Jaccard < 0.5)
+modelo_bootstrap_km$bootrecover # número de recuperaciones de los clusters en los B runs ejecutados (Jaccard > 0.75)
+```
+
+k= 3 0.6434143 0.8245293 0.3782439 si el valor es inferior a 0.5, se va a considerar que el cluster no es estable, y se debería "disolver". 8  5 88 el ultimo cluster se disuelve 88 de las 100 veces. 12 78 12
+
+k=4 0.7176401 0.7494660 0.5797473 0.7351784 -- 6 37 58 37 --- 42 63 42 63 --- 
+
+k=5 .5409729 0.8560700 0.9426721 0.8608166 0.4855159  --- 60  1  2 23 73 --- 11 71 90 77 11
+
+
+bajas tasas de disolución -- altas tasas de reocuperacion 
+
+Después de analizar las técnicas de evaluación, concluimos que aparentemente (no es una ciencia exacta), el número de cluster ideal sería K=3, dadas sus mejores métricas de WSS, CH y clusterboot, aunque K=5 no estaría desacertado dados el criterio de silueta y buenos valores de clusterboot.
+
+
+### 2. PCA
+
+Vamos a obtener los componentes principales del dataset original a partir del análisis de componentes principales PCA.
+
+
+```{r pca, echo=FALSE}
+#clientesR_std$clusters<-NULL
+set.seed(1234)
+colnames(clientesR_std)
+pcomp<- prcomp(clientesR_std, scale=TRUE)
+
+```
+
+#######ESCRIBIR ALGO SOBRE PCA y datos que se muestran a continuación
+El número de PCs obtenidos en este caso es igual al número de variables originales, es decir X. Si hay mas variables que instancias, obtendríamos número de instancias - 1 PCs. Podemos ver que las desviaciones estándar de los componentes principales resultantes, son presentadas en el orden esperado, de mayor a menor:
+
+Ver los primeros registros de los datos en el nuevo sistema de coordenadas
+matriz de rotaciòn con las cargas de los PCs con respecto a las varibles originales
+
+```{r pca, echo=FALSE}
+pcomp$sdev
+head(pcomp$x)
+pcomp$rotation
+
+```
+####2.1 Interpretación
+
+De la información anterior podemos decir que:
+* identificar las viaribles originales que son improtnes para cada PC. Analizando la magnitud absoluta de los loadings
+PC1 mayor contribuciòn de: Ingreso, casa, saldo restante. al igual que se analizó en el correlograma de más arriba, el cual mostraba alta correlaciòn entre dichas variables.
+
+El segundo PC PC2 sobre cargo y satisfacción preseetna altos valores de carga de otras variables, que podrìamos interpretar cvomo el eje XXX "soltero", 
+
+pc3 
+pc4
+pc5
+pc6
+pc7
+pc8
+
+```{r pca2, echo=FALSE}
+biplot(pcomp, c(1,2))
+biplot(pcomp, c(1,3))
+
+```
+
+#### Varianza explicada
+
+```{r pca, echo=FALSE}
+varianzasPC <- pcomp$sdev^2
+varianzasPC
+sum(varianzasPC)
+porcentajeInfoPC <- varianzasPC / sum(varianzasPC)
+porcentajeInfoPC
+
+```
+Podemos notar que el PC1 contiene la información de 2.08 variables, es decir, PC1 explica el 26% de la varianza total de los datos. Por su parte PC6,PC7 y PC8 sólo logran explicar el 9%, 3% y 1% respectivamente, de la varianza total.
+
+```{r pca, echo=FALSE}
+sum(porcentajeInfoPC[1:2]) #En los 2 primeros PCs
+sum(porcentajeInfoPC[1:3]) #en los 3 primeros PCs
+sum(porcentajeInfoPC[1:4])
+sum(porcentajeInfoPC[1:5])
+
+```
+Con lo anterior, podemos evaluar una reducción de dimensiones teniendo en cuenta que los 5 primeros PCS 84% de la información.
+
+```{r pca, echo=FALSE}
+dfPorcentajes = data.frame(PC=1:8, simple=porcentajeInfoPC, acumulado=cumsum(porcentajeInfoPC))
+dfPorcentajes
+
+library(reshape2)
+dfPorcentajes2 <- melt(dfPorcentajes, id.vars="PC", variable.name="Tipo", value.name="Porcentaje")
+dfPorcentajes2
+
+ggplot(data=dfPorcentajes2, aes(x=PC, y=Porcentaje, shape=Tipo, colour=Tipo))+
+  labs(title="Porcentaje de información de cada PC", x="PC", y="Porcentaje") + 
+  scale_y_continuous(limits = c(0, 1)) +
+  geom_point(size=2)
+
+```
+
+El gráfico anterior permite observar de una manera màs sencilla la cantidad de informaciòn de cada PC.
+
+
+#### PREGUNTA 1:
+***** Extraiga los componentes principales, analice sus niveles de varianza explicada, e interprete
+los 3 más importantes en función de las variables originales.********
+
+Si comparamos con las variables originales, teníamos que cada variable estandarizada tenía una varianza de 1, es decir que un porcentaje de la varianza explicada de 1/6 = 16.7%. Así, dos variables originales explican el 33% de la información, versus 68.7% con los PCs.
+
+
+### 3. Clustering con K-Means
+
+```{r clustering1, echo=FALSE}
+#clientes_pca <- data.frame(pcomp$x) 
+
+colnames(clientesR_std)
+clientesR_std$clusters <- NULL #Borramos el clustering anterior 
+colnames(clientesR_std)
+
+k <- 4
+set.seed(1234)
+kmClustering3 <- kmeans(clientesR_std, k, nstart=100, iter.max=150)
+clientesR_std$clusters <- as.factor(kmClustering3$cluster)
+kmClustering3$size
+
+#names(kmClustering3)
+#kmClustering3$cluster[1:10]
+#kmClustering3$centers
+#kmClustering3$totss
+#kmClustering3$tot.withinss
+#kmClustering3$betweenss
+
+#clientesR_std$clusters <- as.factor(kmClustering3$cluster)
+#str(clientesR_std)
+fviz_cluster(kmClustering3, clientesR_std[,1:8], geom="point")#labelsize = 5)
+
+```
+
+Describir los clusters que se tienen... Tenemos 3 clusters, el cluster 1 (rojo) con xxx intancias...2 con x... 3 con...
+
+
+
+```{r eda5, echo=FALSE}
+# visualizacion de los clusters....
+
+ggplot(clientesR_std, aes(x=INGRESOS)) + 
+  geom_density(aes(group=clusters, colour=clusters, fill=clusters), alpha=0.1) +
+  scale_colour_manual(values=rainbow(k))
+
+ggplot(clientesR_std, aes(x=CASA)) + 
+  geom_density(aes(group=clusters, colour=clusters, fill=clusters), alpha=0.1) +
+  scale_colour_manual(values=rainbow(k))
+
+ggplot(clientesR_std, aes(x=PRECIO_DISPOSITIVO)) + 
+  geom_density(aes(group=clusters, colour=clusters, fill=clusters), alpha=0.1) +
+  scale_colour_manual(values=rainbow(k))
+
+ggplot(clientesR_std, aes(x=MESES)) + 
+  geom_density(aes(group=clusters, colour=clusters, fill=clusters), alpha=0.1) +
+  scale_colour_manual(values=rainbow(k))
+
+ggplot(clientesR_std, aes(x=DURACION)) + 
+  geom_density(aes(group=clusters, colour=clusters, fill=clusters), alpha=0.1) +
+  scale_colour_manual(values=rainbow(k))
+
+ggplot(clientesR_std, aes(x=SOBRECARGO)) + 
+  geom_density(aes(group=clusters, colour=clusters, fill=clusters), alpha=0.1) +
+  scale_colour_manual(values=rainbow(k))
+
+ggplot(clientesR_std, aes(x=SALDO_RESTANTE)) + 
+  geom_density(aes(group=clusters, colour=clusters, fill=clusters), alpha=0.1) +
+  scale_colour_manual(values=rainbow(k))
+
+ggplot(clientesR_std, aes(x=SATISFACCION)) + 
+  geom_density(aes(group=clusters, colour=clusters, fill=clusters), alpha=0.1) +
+  scale_colour_manual(values=rainbow(k))
+
+```
+
+
+#### Clustering jerárquico
+```{r pca, echo=FALSE}
+clientes_pca <- data.frame(pcomp$x)
+head(clientes_pca)
+distancias <- dist(clientesR_std, method = "euclidean")
+as.matrix(distancias)[1:6, 1:6]
+
+#Single
+modelo_single <- hclust(distancias, method="single")
+modelo_single
+
+clustersSingle <- cutree(modelo_single, k=3)
+clientes_pca$clustersSingle <- as.factor(clustersSingle)
+#dos grandes y un tercero pequeño
+table(clustersSingle)
+
+plot(modelo_single, main="Dendrograma con single linkage", ylab="Distancia", xlab = "Instancias", hang=-1)
+rect.hclust(modelo_single, k=3)
+
+ggplot(data=clientes_pca, aes(x=PC1, y=PC2)) +
+  geom_point(size=2, alpha=.5, colour=clustersSingle) + labs(title="Single linkage")
+
+#COMPLETE
+
+modelo_complete <- hclust(distancias, method="complete")
+modelo_complete
+
+clustersComplete <- cutree(modelo_complete, k=3)
+clientes_pca$clustersComplete <- as.factor(clustersComplete)
+table(clustersComplete)
+
+plot(modelo_complete, main="Dendrograma con complete linkage", ylab="Distancia", xlab = "Instancias", hang=-1)
+rect.hclust(modelo_complete, k=3)
+
+ggplot(data=clientes_pca, aes(x=PC1, y=PC2)) +
+  geom_point(size=2, alpha=.5, colour=clustersComplete) + labs(title="Complete linkage")
+
+
+
+
+modelo_average <- hclust(distancias, method="average")
+modelo_average
+
+clustersAverage <- cutree(modelo_average, k=3)
+clientes_pca$clustersAverage <- as.factor(clustersAverage)
+table(clustersAverage)
+
+plot(modelo_average, main="Dendrograma con average linkage", ylab="Distancia", xlab = "Instancias", hang=-1)
+rect.hclust(modelo_average, k=3)
+
+ggplot(data=clientes_pca, aes(x=PC1, y=PC2)) +
+  geom_point(size=2, alpha=.5, colour=clustersAverage) + labs(title="Average linkage")
+
+
+####ESTE LEJOS ES MUY BUENO
+##En este caso, llega a unos clusters mas balanceados en cuanto a número de instancias, con un dendrograma que presenta una idea mucho más clara de la organización de los datos
+
+modelo_ward <- hclust(distancias, method="ward.D2")
+modelo_ward
+
+clustersWard <- cutree(modelo_ward, k=3)
+clientes_pca$clustersWard <- as.factor(clustersWard)
+table(clustersWard)
+
+plot(modelo_ward, main="Dendrograma con Ward", ylab="Distancia", xlab = "Instancias", hang=-1)
+rect.hclust(modelo_ward, k=3)
+
+ggplot(data=clientes_pca, aes(x=PC1, y=PC2)) +
+  geom_point(size=2, alpha=.5, colour=clustersWard) + labs(title="Ward")
+
+
+
+modelo_centroid <- hclust(distancias, method="centroid")
+modelo_centroid
+
+clustersCentroid <- cutree(modelo_centroid, k=3)
+clientes_pca$clustersCentroid <- as.factor(clustersCentroid)
+table(clustersCentroid)
+
+plot(modelo_centroid, main="Dendrograma con centroid", ylab="Distancia", xlab = "Instancias", hang=-1)
+rect.hclust(modelo_centroid, k=3)
+
+ggplot(data=clientes_pca, aes(x=PC1, y=PC2)) +
+  geom_point(size=2, alpha=.5, colour=clustersCentroid) + labs(title="Centroid")
+
+
+
+
+modelo_median <- hclust(distancias, method="median")
+modelo_median
+
+clustersMedian <- cutree(modelo_median, k=3)
+clientes_pca$clustersMedian <- as.factor(clustersMedian)
+table(clustersMedian)
+
+plot(modelo_median, main="Dendrograma con median", ylab="Distancia", xlab = "Instancias", hang=-1)
+rect.hclust(modelo_median, k=3)
+
+ggplot(data=clientes_pca, aes(x=PC1, y=PC2)) +
+  geom_point(size=2, alpha=.5, colour=clustersMedian) + labs(title="Median")
+
+```
+
+
+####COMPARACIÓN
+
+```{r pca, echo=FALSE}
+
+clientes_pca$clustersKmeans <- as.factor(c("A", "B", "C")[clustersKmeans])
+table(clientes_pca$clustersKmeans)
+
+table(clustersKmeans, clustersComplete) #En las filas se ve el primer argumento (los clusters de k-Means)
+# Podemos ver que intercambiando los clusters de 1 y 3 de complete, la logramos.
+# Esto implica cambiar los valores de los clusters usados al crear la columna factor en el dataframe
+clientes_pca$clustersComplete <- as.factor(c("C", "B", "A")[clustersComplete])
+table(clientes_pca$clustersKmeans, clientes_pca$clustersComplete)
+
+ggplot(data=clientes_pca, aes(x=PC1, y=PC2)) +
+  geom_point(size=5, alpha=.2, aes(color=clustersKmeans)) + 
+  geom_point(size=2, alpha=1, aes(color=clustersComplete)) +
+  labs(title="K-Means (color externo) vs Complete (color interno)", color="Clusters")
+
+
+
+table(clustersKmeans, clustersWard) #En las filas se ve el primer argumento (los clusters de K-Means)
+# Podemos ver que intercambiando cambiando el orden de las columnas al de 3, 1 y 2 la logramos.
+# Esto implica cambiar los valores de los clusters usados al crear la columna factor en el dataframe
+clientes_pca$clustersWard <- as.factor(c("C", "A", "B")[clustersWard])
+table(clientes_pca$clustersKmeans, clientes_pca$clustersWard)
+
+ggplot(data=clientes_pca, aes(x=PC1, y=PC2)) +
+  geom_point(size=5, alpha=.2, aes(color=clustersKmeans)) + 
+  geom_point(size=2, alpha=1, aes(color=clustersWard)) +
+  labs(title="K-Means (color externo) vs Ward (color interno)", color="Clusters")
+
+
+```
+
+
+
+
