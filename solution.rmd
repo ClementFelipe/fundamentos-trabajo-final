@@ -12,6 +12,7 @@ output:
 library(tidyverse)
 library(caret)
 library(doParallel)
+library(rattle)
 ```
 
 # Carga de datos
@@ -49,8 +50,6 @@ La distribucion de personas retiradas y vinculadas es casi igual, con el 50.36% 
 
 ```{r ingresos}
 ggplot(data_raw) + geom_density(aes(ingresos, group = estado, fill = estado, alpha = I(0.5)))
-ggplot(data_raw) +
-  geom_point(aes(x = ingresos, y = casa, alpha = I(0.1)))
 ```
 
 Esta variable parece segregar los clientes en 3 grupos diferentes.
@@ -327,3 +326,11 @@ reg_predictions <- predict(object = model_reg, data_test)
 reg_results <- confusionMatrix(reg_predictions, data_test$estado)
 reg_results
 ```
+
+Como se puede observar, los 3 modelos tienen exactamente la misma matriz de confusion, por lo tanto tendran el mismo accuracy, Kappa y recall. Escoger un modelo para este problema, en el cual la calidad de prediccion de los 3 modelos es igual, se reduce a la inferencia que se pueda hacer con el. De esta forma, el modelo preferible es el arbol de decision, pues predice igual a los otros dos y sus resultados se pueden interpretar facilmente, permitiendo al negocio tomas decisiones en base a su estructura.
+
+```{r tree_viz}
+fancyRpartPlot(model_tree$finalModel)
+```
+
+En este caso, el modelo que predice mejor el estado de un cliente es un decision stump de la variable `statisfaccion`, que particiona para un valor de 5.7. Para la puesta de este modelo en produccion, se entrenaria con el dataset completo, el modelo visualizado anteriormente solo fue entrenado con el training set.
